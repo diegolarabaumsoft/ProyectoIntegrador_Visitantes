@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/*
+ * Base visual del VMS: Tailwind Plus v4 (Application UI).
+ * Los componentes del catálogo usan la paleta gray/indigo y variantes dark:
+ * (prefers-color-scheme). Aquí solo se registran las fuentes y el color de marca.
+ */
+@theme {
+  --font-sans: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    @apply h-full bg-gray-50 dark:bg-gray-900;
+  }
+  body {
+    @apply h-full font-sans text-gray-900 antialiased dark:text-white;
+  }
+}

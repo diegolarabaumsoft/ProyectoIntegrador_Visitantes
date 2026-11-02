@@ -1,0 +1,42 @@
+# Dependencias
+node_modules/
+
+# Entornos
+.env
+.env.local
+.env.*.local
+backend/.env
+frontend/.env.local
+
+# Builds
+backend/dist/
+puente-huellero/dist/
+frontend/.next/
+frontend/out/
+
+# Logs y temporales
+*.log
+npm-debug.log*
+.DS_Store
+coverage/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Catálogo de Tailwind Plus (licencia por usuario, no redistribuible)
+frontend/tailwind_pro/
+
+# Archivos generados por la aplicación
+backend/storage/
+
+deploy/.env.prod
+deploy/respaldos/
+
+# Documentación de planificación y archivos del asistente de desarrollo (solo locales)
+.claude/
+AGENTS.md
+PLAN_IMPLEMENTACION.md
+docs/
+*.docx

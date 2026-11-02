@@ -1,0 +1,767 @@
+// Esquema de datos del VMS. Derivado del diagrama de clases del dominio (Figura 3)
+// y de la sección 4 de PLAN_IMPLEMENTACION.md.
+//
+// Convenciones:
+//  - Modelos en PascalCase, tablas en snake_case (@@map).
+//  - Campos en camelCase, columnas en snake_case (@map).
+//  - Campos marcados "(cifrado)" se guardan como texto cifrado por CryptoService;
+//    los campos *Hash permiten búsquedas e índices sin exponer el dato.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------
+// Enumeraciones
+// ---------------------------------------------------------------
+
+enum Rol {
+  ANFITRION
+  RECEPCION_SEGURIDAD
+  JEFE_SEGURIDAD
+  ADMINISTRADOR
+  DPO
+}
+
+enum TipoDocumento {
+  CC
+  CE
+  PASAPORTE
+  OTRO
+}
+
+enum EstadoInvitacion {
+  ACTIVA
+  REPROGRAMADA
+  CANCELADA
+}
+
+/// Patrón Estado de la Visita. Transiciones válidas en VisitasService.
+enum EstadoVisita {
+  PROGRAMADA
+  PRE_REGISTRADA
+  EN_PLANTA
+  FINALIZADA
+  CANCELADA
+  BLOQUEADA
+}
+
+enum ElementoEpp {
+  CASCO
+  GAFAS
+  TAPABOCAS
+  PROTECTOR_AUDITIVO
+  CHALECO
+  BOTAS
+  OTRO
+}
+
+/// Cómo se identificó al visitante en el ingreso (HU-15, HU-40)
+enum MetodoId {
+  HUELLA
+  CREDENCIAL_ALTERNATIVA
+  MANUAL_CONTINGENCIA
+}
+
+enum Dedo {
+  PULGAR_D
+  INDICE_D
+  MEDIO_D
+  ANULAR_D
+  MENIQUE_D
+  PULGAR_I
+  INDICE_I
+  MEDIO_I
+  ANULAR_I
+  MENIQUE_I
+}
+
+enum TipoTerminal {
+  ENTRADA
+  SALIDA
+  ZONA
+}
+
+enum EstadoAutorizacionTerminal {
+  PENDIENTE
+  CARGADA
+  REVOCADA
+  FALLIDA
+}
+
+enum ResultadoCotejo {
+  COINCIDE
+  NO_COINCIDE
+  CALIDAD_BAJA
+  PRUEBA_VIDA_FALLIDA
+}
+
+enum TipoEvento {
+  INVITACION_CREADA
+  INVITACION_REPROGRAMADA
+  INVITACION_CANCELADA
+  ENLACE_ENVIADO
+  PRE_REGISTRO_DATOS
+  PRE_REGISTRO_COMPLETADO
+  CONSENTIMIENTO_ACEPTADO
+  INDUCCION_APROBADA
+  INDUCCION_REPROBADA
+  CREDENCIAL_EMITIDA
+  CREDENCIAL_RECHAZADA
+  CREDENCIAL_INVALIDADA
+  CHECKIN_BLOQUEADO
+  EXCEPCION_REGISTRADA
+  EPP_ENTREGADO
+  EPP_DEVUELTO
+  ACS_AUTORIZADO
+  ACS_CONTINGENCIA
+  ACS_RECONCILIADO
+  CHECKIN_REALIZADO
+  REGISTRO_EXPRES
+  MOVIMIENTO_ZONA
+  ACOMPANANTE_ASIGNADO
+  VEHICULO_REGISTRADO
+  ALERTA_PERMANENCIA
+  CHECKOUT_REALIZADO
+  INCIDENCIA_DEVOLUCION
+  RESTRICCION_CREADA
+  RESTRICCION_MODIFICADA
+  RESTRICCION_ELIMINADA
+  USUARIO_CREADO
+  USUARIO_MODIFICADO
+  USUARIO_DESACTIVADO
+  LOGIN_OK
+  LOGIN_FALLIDO
+  CUENTA_BLOQUEADA
+  SESION_CERRADA
+  NOTIFICACION_ENVIADA
+  NOTIFICACION_FALLIDA
+  REPORTE_GENERADO
+  EXPORTACION_ANONIMIZADA
+  SOLICITUD_DATOS_REGISTRADA
+  SOLICITUD_DATOS_ATENDIDA
+  ANONIMIZACION_RETENCION
+  CONFIGURACION_MODIFICADA
+  SATISFACCION_REGISTRADA
+  HUELLA_ENROLADA
+  COTEJO_EXITOSO
+  COTEJO_FALLIDO
+  PRUEBA_VIDA_FALLIDA
+  PLANTILLA_CARGADA
+  PLANTILLA_REVOCADA
+  PLANTILLA_PURGADA
+  TERMINAL_FUERA_LINEA
+  TERMINAL_RECUPERADO
+  PASO_TERMINAL
+}
+
+enum CanalNotificacion {
+  CORREO
+  MENSAJERIA
+}
+
+enum EstadoNotificacion {
+  PENDIENTE
+  ENVIADA
+  FALLIDA
+}
+
+enum NombreIndicador {
+  TIEMPO_CHECKIN_P90
+  TIEMPO_CHECKIN_PROMEDIO
+  COMPLETITUD_REGISTRO
+  SATISFACCION
+  VISITAS_DIA
+  BLOQUEOS
+  CONTINGENCIAS
+  TASA_RECHAZO_BIOMETRICO
+  TIEMPO_CHECKIN_P90_ENROLADO
+  TIEMPO_CHECKIN_P90_PRIMERA_VISITA
+}
+
+enum OperadorUmbral {
+  MAYOR
+  MENOR
+}
+
+enum TipoSolicitudDatos {
+  ELIMINACION
+  ANONIMIZACION
+  CONSULTA
+  REVOCACION_BIOMETRICA
+}
+
+enum EstadoSolicitudDatos {
+  PENDIENTE
+  EN_PROCESO
+  ATENDIDA
+  VENCIDA
+}
+
+enum PeriodicidadReporte {
+  DIARIA
+  SEMANAL
+  MENSUAL
+}
+
+// ---------------------------------------------------------------
+// Usuarios y roles (HU-25, HU-26)
+// ---------------------------------------------------------------
+
+model UsuarioInterno {
+  id                    String    @id @default(uuid()) @db.Uuid
+  nombre                String
+  correo                String    @unique
+  hashContrasena        String    @map("hash_contrasena")
+  rol                   Rol
+  /// Solo aplica a anfitriones
+  area                  String?
+  activo                Boolean   @default(true)
+  intentosFallidos      Int       @default(0) @map("intentos_fallidos")
+  bloqueadoHasta        DateTime? @map("bloqueado_hasta") @db.Timestamptz(6)
+  ultimoAcceso          DateTime? @map("ultimo_acceso") @db.Timestamptz(6)
+  /// Contraseña temporal pendiente de cambiar
+  debeCambiarContrasena Boolean   @default(false) @map("debe_cambiar_contrasena")
+  createdAt             DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt             DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  refreshTokens          RefreshToken[]
+  invitaciones           Invitacion[]
+  visitasComoAnfitrion   Visita[]              @relation("AnfitrionVisitas")
+  visitasComoAcompanante Visita[]              @relation("AcompananteVisitas")
+  movimientosRegistrados MovimientoZona[]
+  restriccionesCreadas   EntradaRestriccion[]  @relation("AutorRestriccion")
+  excepcionesRegistradas ExcepcionAutorizada[]
+  solicitudesAtendidas   SolicitudDatos[]
+  eppRegistrados         EntregaEpp[]
+
+  @@index([rol])
+  @@map("usuarios_internos")
+}
+
+model RefreshToken {
+  id        String         @id @default(uuid()) @db.Uuid
+  usuarioId String         @map("usuario_id") @db.Uuid
+  tokenHash String         @unique @map("token_hash")
+  expiraEn  DateTime       @map("expira_en") @db.Timestamptz(6)
+  revocado  Boolean        @default(false)
+  createdAt DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  usuario   UsuarioInterno @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------
+// Visita y pre-registro (HU-01 a HU-05, HU-28, HU-29, HU-33)
+// ---------------------------------------------------------------
+
+model Visitante {
+  id                  String        @id @default(uuid()) @db.Uuid
+  /// (cifrado)
+  nombreCompleto      String        @map("nombre_completo")
+  tipoDocumento       TipoDocumento @map("tipo_documento")
+  /// (cifrado)
+  numeroDocumento     String        @map("numero_documento")
+  numeroDocumentoHash String        @map("numero_documento_hash")
+  empresa             String
+  /// (cifrado)
+  correo              String
+  correoHash          String        @map("correo_hash")
+  /// (cifrado)
+  telefono            String?
+  anonimizado         Boolean       @default(false)
+  createdAt           DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  visitas     Visita[]
+  inducciones InduccionSeguridad[]
+  solicitudes SolicitudDatos[]
+  plantillas  PlantillaBiometrica[]
+
+  @@index([numeroDocumentoHash])
+  @@index([correoHash])
+  @@map("visitantes")
+}
+
+model Invitacion {
+  id          String           @id @default(uuid()) @db.Uuid
+  anfitrionId String           @map("anfitrion_id") @db.Uuid
+  fechaVisita DateTime         @map("fecha_visita") @db.Timestamptz(6)
+  motivo      String
+  estado      EstadoInvitacion @default(ACTIVA)
+  esGrupal    Boolean          @default(false) @map("es_grupal")
+  createdAt   DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  anfitrion UsuarioInterno @relation(fields: [anfitrionId], references: [id])
+  visitas   Visita[]
+
+  @@index([anfitrionId, fechaVisita])
+  @@map("invitaciones")
+}
+
+model Visita {
+  id                   String       @id @default(uuid()) @db.Uuid
+  /// Nula en registro exprés (HU-11)
+  invitacionId         String?      @map("invitacion_id") @db.Uuid
+  visitanteId          String       @map("visitante_id") @db.Uuid
+  anfitrionId          String       @map("anfitrion_id") @db.Uuid
+  estado               EstadoVisita @default(PROGRAMADA)
+  fechaProgramada      DateTime     @map("fecha_programada") @db.Timestamptz(6)
+  motivo               String
+  /// Hash del token del enlace de pre-registro (uno por visitante, HU-02 / HU-29);
+  /// el token en claro solo viaja en el correo
+  tokenEnlaceHash      String?      @unique @map("token_enlace_hash")
+  vencimientoEnlace    DateTime?    @map("vencimiento_enlace") @db.Timestamptz(6)
+  horaIngreso          DateTime?    @map("hora_ingreso") @db.Timestamptz(6)
+  horaSalida           DateTime?    @map("hora_salida") @db.Timestamptz(6)
+  /// Umbral de permanencia en minutos (HU-16)
+  tiempoAutorizadoMin  Int          @map("tiempo_autorizado_min")
+  modoContingencia     Boolean      @default(false) @map("modo_contingencia")
+  acompananteId        String?      @map("acompanante_id") @db.Uuid
+  esExpres             Boolean      @default(false) @map("es_expres")
+  identidadVerificada  Boolean      @default(false) @map("identidad_verificada")
+  /// Nulo mientras no haya ingreso (HU-15)
+  metodoIdentificacion MetodoId?    @map("metodo_identificacion")
+  /// Paso confirmado por el terminal de entrada, o manual en contingencia (D8)
+  ingresoFisicoEn      DateTime?    @map("ingreso_fisico_en") @db.Timestamptz(6)
+  alertaPermanenciaEn  DateTime?    @map("alerta_permanencia_en") @db.Timestamptz(6)
+  /// Encuesta 1-5 tras el check-out (KPI satisfacción)
+  satisfaccion         Int?
+  createdAt            DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  invitacion             Invitacion?            @relation(fields: [invitacionId], references: [id])
+  visitante              Visitante              @relation(fields: [visitanteId], references: [id])
+  anfitrion              UsuarioInterno         @relation("AnfitrionVisitas", fields: [anfitrionId], references: [id])
+  acompanante            UsuarioInterno?        @relation("AcompananteVisitas", fields: [acompananteId], references: [id])
+  credencial             CredencialQr?
+  consentimiento         Consentimiento?
+  vehiculo               Vehiculo?
+  entregasEpp            EntregaEpp[]
+  movimientos            MovimientoZona[]
+  excepcion              ExcepcionAutorizada?
+  eventos                EventoBitacora[]
+  notificaciones         Notificacion[]
+  colaAcs                ColaAcsPendiente[]
+  autorizacionesTerminal AutorizacionTerminal[]
+  cotejos                EventoCotejo[]
+  zonasAutorizadas       VisitaZona[]
+
+  @@index([estado])
+  @@index([visitanteId])
+  @@index([anfitrionId, fechaProgramada])
+  @@index([fechaProgramada])
+  @@map("visitas")
+}
+
+model CredencialQr {
+  id                 String    @id @default(uuid()) @db.Uuid
+  visitaId           String    @unique @map("visita_id") @db.Uuid
+  /// jti del JWT firmado que contiene el QR
+  codigo             String    @unique
+  emitidaEn          DateTime  @default(now()) @map("emitida_en") @db.Timestamptz(6)
+  venceEn            DateTime  @map("vence_en") @db.Timestamptz(6)
+  activa             Boolean   @default(true)
+  invalidadaEn       DateTime? @map("invalidada_en") @db.Timestamptz(6)
+  motivoInvalidacion String?   @map("motivo_invalidacion")
+  fisicaEntregada    Boolean   @default(false) @map("fisica_entregada")
+  fisicaDevuelta     Boolean   @default(false) @map("fisica_devuelta")
+
+  visita Visita @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+
+  @@map("credenciales_qr")
+}
+
+model Consentimiento {
+  id                     String   @id @default(uuid()) @db.Uuid
+  visitaId               String   @unique @map("visita_id") @db.Uuid
+  versionPolitica        String   @map("version_politica")
+  aceptaTratamiento      Boolean  @map("acepta_tratamiento")
+  aceptaNda              Boolean  @map("acepta_nda")
+  /// Autorización facultativa e independiente del dato sensible (HU-04)
+  autorizaBiometria      Boolean  @default(false) @map("autoriza_biometria")
+  versionTextoBiometrico String?  @map("version_texto_biometrico")
+  fechaHoraAceptacion    DateTime @default(now()) @map("fecha_hora_aceptacion") @db.Timestamptz(6)
+  ip                     String?
+  userAgent              String?  @map("user_agent")
+
+  visita Visita @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+
+  @@map("consentimientos")
+}
+
+model Vehiculo {
+  id       String  @id @default(uuid()) @db.Uuid
+  visitaId String  @unique @map("visita_id") @db.Uuid
+  placa    String
+  tipo     String?
+
+  visita Visita @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+
+  @@map("vehiculos")
+}
+
+// ---------------------------------------------------------------
+// Seguridad industrial y permanencia (HU-12, HU-16, HU-31, HU-32, HU-34, HU-35)
+// ---------------------------------------------------------------
+
+/// Pertenece al visitante, no a la visita: vigencia de 12 meses (HU-32)
+model InduccionSeguridad {
+  id              String    @id @default(uuid()) @db.Uuid
+  visitanteId     String    @map("visitante_id") @db.Uuid
+  puntaje         Int
+  aprobada        Boolean
+  fechaAprobacion DateTime? @map("fecha_aprobacion") @db.Timestamptz(6)
+  venceEn         DateTime? @map("vence_en") @db.Timestamptz(6)
+  respuestas      Json?
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  visitante Visitante @relation(fields: [visitanteId], references: [id], onDelete: Cascade)
+
+  @@index([visitanteId, aprobada])
+  @@map("inducciones_seguridad")
+}
+
+model PreguntaInduccion {
+  id                String  @id @default(uuid()) @db.Uuid
+  enunciado         String
+  /// Arreglo de opciones de respuesta
+  opciones          Json
+  respuestaCorrecta Int     @map("respuesta_correcta")
+  activa            Boolean @default(true)
+  orden             Int     @default(0)
+
+  @@map("preguntas_induccion")
+}
+
+model EntregaEpp {
+  id              String      @id @default(uuid()) @db.Uuid
+  visitaId        String      @map("visita_id") @db.Uuid
+  elemento        ElementoEpp
+  entregado       Boolean     @default(true)
+  devuelto        Boolean     @default(false)
+  entregadoEn     DateTime    @default(now()) @map("entregado_en") @db.Timestamptz(6)
+  devueltoEn      DateTime?   @map("devuelto_en") @db.Timestamptz(6)
+  registradoPorId String?     @map("registrado_por_id") @db.Uuid
+
+  visita        Visita          @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  registradoPor UsuarioInterno? @relation(fields: [registradoPorId], references: [id])
+
+  @@unique([visitaId, elemento])
+  @@map("entregas_epp")
+}
+
+model Zona {
+  id                  String  @id @default(uuid()) @db.Uuid
+  nombre              String  @unique
+  esSensible          Boolean @default(false) @map("es_sensible")
+  requiereAcompanante Boolean @default(false) @map("requiere_acompanante")
+  activa              Boolean @default(true)
+
+  movimientos        MovimientoZona[]
+  terminales         TerminalBiometrico[]
+  visitasAutorizadas VisitaZona[]
+
+  @@map("zonas")
+}
+
+model MovimientoZona {
+  id              String    @id @default(uuid()) @db.Uuid
+  visitaId        String    @map("visita_id") @db.Uuid
+  zonaId          String    @map("zona_id") @db.Uuid
+  horaEntrada     DateTime  @default(now()) @map("hora_entrada") @db.Timestamptz(6)
+  horaSalida      DateTime? @map("hora_salida") @db.Timestamptz(6)
+  registradoPorId String?   @map("registrado_por_id") @db.Uuid
+
+  visita        Visita          @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  zona          Zona            @relation(fields: [zonaId], references: [id])
+  registradoPor UsuarioInterno? @relation(fields: [registradoPorId], references: [id])
+
+  @@index([visitaId])
+  @@map("movimientos_zona")
+}
+
+// ---------------------------------------------------------------
+// Restricciones y excepciones (HU-08, HU-17, HU-18, HU-19)
+// ---------------------------------------------------------------
+
+model EntradaRestriccion {
+  id                  String   @id @default(uuid()) @db.Uuid
+  numeroDocumentoHash String   @map("numero_documento_hash")
+  /// (cifrado)
+  numeroDocumento     String   @map("numero_documento")
+  nombreReferencia    String   @map("nombre_referencia")
+  motivo              String
+  fechaRegistro       DateTime @default(now()) @map("fecha_registro") @db.Timestamptz(6)
+  autorId             String   @map("autor_id") @db.Uuid
+  activa              Boolean  @default(true)
+  actualizadoPorId    String?  @map("actualizado_por_id") @db.Uuid
+  updatedAt           DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  autor       UsuarioInterno        @relation("AutorRestriccion", fields: [autorId], references: [id])
+  excepciones ExcepcionAutorizada[]
+
+  @@index([numeroDocumentoHash, activa])
+  @@map("entradas_restriccion")
+}
+
+model ExcepcionAutorizada {
+  id                   String   @id @default(uuid()) @db.Uuid
+  visitaId             String   @unique @map("visita_id") @db.Uuid
+  entradaRestriccionId String   @map("entrada_restriccion_id") @db.Uuid
+  justificacion        String
+  /// Nombre y cargo del responsable que autoriza
+  autorizadoPor        String   @map("autorizado_por")
+  registradoPorId      String   @map("registrado_por_id") @db.Uuid
+  fecha                DateTime @default(now()) @db.Timestamptz(6)
+  /// Limitada a la visita en curso
+  vigenteHasta         DateTime @map("vigente_hasta") @db.Timestamptz(6)
+
+  visita             Visita             @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  entradaRestriccion EntradaRestriccion @relation(fields: [entradaRestriccionId], references: [id])
+  registradoPor      UsuarioInterno     @relation(fields: [registradoPorId], references: [id])
+
+  @@map("excepciones_autorizadas")
+}
+
+// ---------------------------------------------------------------
+// Auditoría, notificaciones y reportes (HU-10, HU-15, HU-20 a HU-24, HU-36)
+// ---------------------------------------------------------------
+
+/// Inmutable: un trigger de PostgreSQL rechaza UPDATE y DELETE (RNF-06)
+model EventoBitacora {
+  id         BigInt     @id @default(autoincrement())
+  fechaHora  DateTime   @default(now()) @map("fecha_hora") @db.Timestamptz(6)
+  tipoEvento TipoEvento @map("tipo_evento")
+  /// Nombre del usuario o "SISTEMA"
+  actor      String
+  actorId    String?    @map("actor_id") @db.Uuid
+  visitaId   String?    @map("visita_id") @db.Uuid
+  entidad    String?
+  entidadId  String?    @map("entidad_id")
+  resultado  String
+  detalle    Json?
+  ip         String?
+
+  visita Visita? @relation(fields: [visitaId], references: [id])
+
+  @@index([fechaHora])
+  @@index([tipoEvento])
+  @@index([visitaId])
+  @@index([actorId])
+  @@map("eventos_bitacora")
+}
+
+model Notificacion {
+  id           String             @id @default(uuid()) @db.Uuid
+  canal        CanalNotificacion
+  destinatario String
+  asunto       String
+  mensaje      String
+  tipo         String
+  visitaId     String?            @map("visita_id") @db.Uuid
+  estado       EstadoNotificacion @default(PENDIENTE)
+  intentos     Int                @default(0)
+  enviadaEn    DateTime?          @map("enviada_en") @db.Timestamptz(6)
+  error        String?
+  createdAt    DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  visita Visita? @relation(fields: [visitaId], references: [id])
+
+  @@index([estado])
+  @@index([visitaId])
+  @@map("notificaciones")
+}
+
+model Indicador {
+  id           String          @id @default(uuid()) @db.Uuid
+  nombre       NombreIndicador
+  valor        Float
+  fechaCalculo DateTime        @default(now()) @map("fecha_calculo") @db.Timestamptz(6)
+  periodo      DateTime        @db.Date
+
+  @@unique([nombre, periodo])
+  @@map("indicadores")
+}
+
+model AlertaUmbral {
+  id            String            @id @default(uuid()) @db.Uuid
+  indicador     NombreIndicador
+  umbral        Float
+  operador      OperadorUmbral
+  canal         CanalNotificacion @default(CORREO)
+  destinatarios String[]
+  activa        Boolean           @default(true)
+  createdAt     DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("alertas_umbral")
+}
+
+model ReporteGenerado {
+  id           String               @id @default(uuid()) @db.Uuid
+  tipo         String
+  periodicidad PeriodicidadReporte?
+  desde        DateTime             @db.Date
+  hasta        DateTime             @db.Date
+  formato      String
+  rutaArchivo  String               @map("ruta_archivo")
+  generadoEn   DateTime             @default(now()) @map("generado_en") @db.Timestamptz(6)
+  generadoPor  String?              @map("generado_por")
+
+  @@map("reportes_generados")
+}
+
+model SolicitudDatos {
+  id             String               @id @default(uuid()) @db.Uuid
+  visitanteId    String               @map("visitante_id") @db.Uuid
+  tipo           TipoSolicitudDatos
+  fechaRecepcion DateTime             @default(now()) @map("fecha_recepcion") @db.Timestamptz(6)
+  /// Recepción + 15 días hábiles (HU-36)
+  fechaLimite    DateTime             @map("fecha_limite") @db.Timestamptz(6)
+  fechaRespuesta DateTime?            @map("fecha_respuesta") @db.Timestamptz(6)
+  estado         EstadoSolicitudDatos @default(PENDIENTE)
+  atendidaPorId  String?              @map("atendida_por_id") @db.Uuid
+  respuesta      String?
+
+  visitante   Visitante       @relation(fields: [visitanteId], references: [id])
+  atendidaPor UsuarioInterno? @relation(fields: [atendidaPorId], references: [id])
+
+  @@index([estado])
+  @@map("solicitudes_datos")
+}
+
+// ---------------------------------------------------------------
+// Integración ACS y configuración (HU-09, RNF-04)
+// ---------------------------------------------------------------
+
+model ColaAcsPendiente {
+  id        String    @id @default(uuid()) @db.Uuid
+  visitaId  String    @map("visita_id") @db.Uuid
+  payload   Json
+  creadoEn  DateTime  @default(now()) @map("creado_en") @db.Timestamptz(6)
+  intentos  Int       @default(0)
+  enviadoEn DateTime? @map("enviado_en") @db.Timestamptz(6)
+  error     String?
+
+  visita Visita @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+
+  @@index([enviadoEn])
+  @@map("cola_acs_pendientes")
+}
+
+// ---------------------------------------------------------------
+// Biometría (HU-07, HU-09, HU-12, HU-37, HU-38, HU-39)
+// ---------------------------------------------------------------
+
+/// Hasta dos dedos por visitante. Solo la plantilla cifrada, nunca la imagen (RNF-09)
+model PlantillaBiometrica {
+  id                String    @id @default(uuid()) @db.Uuid
+  visitanteId       String    @map("visitante_id") @db.Uuid
+  dedo              Dedo
+  /// SIMULADO mientras no exista el motor real; luego ISO/IEC 19794-2 (D3)
+  formato           String
+  /// (cifrado)
+  datoCifrado       String    @map("dato_cifrado")
+  calidad           Int
+  fechaEnrolamiento DateTime  @default(now()) @map("fecha_enrolamiento") @db.Timestamptz(6)
+  venceEn           DateTime  @map("vence_en") @db.Timestamptz(6)
+  revocadaEn        DateTime? @map("revocada_en") @db.Timestamptz(6)
+
+  visitante Visitante @relation(fields: [visitanteId], references: [id], onDelete: Cascade)
+
+  @@unique([visitanteId, dedo])
+  @@index([venceEn])
+  @@map("plantillas_biometricas")
+}
+
+model TerminalBiometrico {
+  id                   String       @id @default(uuid()) @db.Uuid
+  nombre               String       @unique
+  tipo                 TipoTerminal
+  /// Solo en los lectores de zona
+  zonaId               String?      @map("zona_id") @db.Uuid
+  ip                   String
+  /// Hash del secreto con que el terminal firma sus eventos; nulo hasta generarlo (BIO-09)
+  secretoHash          String?      @map("secreto_hash")
+  enLinea              Boolean      @default(false) @map("en_linea")
+  ultimaSincronizacion DateTime?    @map("ultima_sincronizacion") @db.Timestamptz(6)
+  activo               Boolean      @default(true)
+  createdAt            DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  zona           Zona?                  @relation(fields: [zonaId], references: [id])
+  autorizaciones AutorizacionTerminal[]
+  cotejos        EventoCotejo[]
+
+  @@map("terminales_biometricos")
+}
+
+/// Carga temporal de la plantilla en un terminal durante la visita
+model AutorizacionTerminal {
+  id                     String                     @id @default(uuid()) @db.Uuid
+  visitaId               String                     @map("visita_id") @db.Uuid
+  terminalId             String                     @map("terminal_id") @db.Uuid
+  vigenteDesde           DateTime                   @map("vigente_desde") @db.Timestamptz(6)
+  vigenteHasta           DateTime                   @map("vigente_hasta") @db.Timestamptz(6)
+  estado                 EstadoAutorizacionTerminal @default(PENDIENTE)
+  enviadaEn              DateTime?                  @map("enviada_en") @db.Timestamptz(6)
+  /// La revocación sigue pendiente mientras el terminal no la confirme (HU-14)
+  revocacionSolicitadaEn DateTime?                  @map("revocacion_solicitada_en") @db.Timestamptz(6)
+  revocadaEn             DateTime?                  @map("revocada_en") @db.Timestamptz(6)
+
+  visita   Visita             @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  terminal TerminalBiometrico @relation(fields: [terminalId], references: [id])
+
+  @@unique([visitaId, terminalId])
+  @@index([terminalId, estado])
+  @@map("autorizaciones_terminal")
+}
+
+/// Cada intento de identificación: base de la tasa de rechazo y de FAR/FRR
+model EventoCotejo {
+  id         String          @id @default(uuid()) @db.Uuid
+  visitaId   String?         @map("visita_id") @db.Uuid
+  terminalId String?         @map("terminal_id") @db.Uuid
+  fechaHora  DateTime        @default(now()) @map("fecha_hora") @db.Timestamptz(6)
+  puntaje    Float?
+  resultado  ResultadoCotejo
+  pruebaVida Boolean         @map("prueba_vida")
+  /// RECEPCION o TERMINAL
+  origen     String
+
+  visita   Visita?             @relation(fields: [visitaId], references: [id], onDelete: SetNull)
+  terminal TerminalBiometrico? @relation(fields: [terminalId], references: [id])
+
+  @@index([fechaHora])
+  @@map("eventos_cotejo")
+}
+
+/// Zonas que el lector permite a la visita (D9)
+model VisitaZona {
+  visitaId String @map("visita_id") @db.Uuid
+  zonaId   String @map("zona_id") @db.Uuid
+
+  visita Visita @relation(fields: [visitaId], references: [id], onDelete: Cascade)
+  zona   Zona   @relation(fields: [zonaId], references: [id])
+
+  @@id([visitaId, zonaId])
+  @@map("visita_zonas")
+}
+
+/// Parámetros editables desde el panel (vigencias, umbrales, retención, política)
+model Configuracion {
+  clave       String   @id
+  valor       Json
+  descripcion String?
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@map("configuracion")
+}

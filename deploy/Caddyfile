@@ -1,0 +1,10 @@
+# HTTPS automático. La API y el frontend comparten dominio: las cookies son del mismo sitio.
+{$VMS_DOMINIO} {
+	encode gzip
+	handle /api/* {
+		reverse_proxy backend:3001
+	}
+	handle {
+		reverse_proxy frontend:3000
+	}
+}

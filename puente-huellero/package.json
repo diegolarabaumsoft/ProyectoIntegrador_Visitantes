@@ -1,0 +1,20 @@
+{
+  "name": "puente-huellero",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Servicio local que expone el huellero a la consola de recepción por WebSocket (sección 7.3 del documento base).",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "tsc && node dist/main.js",
+    "test": "tsc && node --test dist/"
+  },
+  "dependencies": {
+    "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/ws": "^8.18.2",
+    "typescript": "^7.0.2"
+  }
+}

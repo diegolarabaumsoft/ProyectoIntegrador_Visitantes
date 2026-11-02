@@ -1,0 +1,25 @@
+{
+  "name": "vms-planta-textil",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema de Gestión de Visitantes (VMS) para una planta textil en Bogotá. Monorepo: backend (NestJS) + frontend (Next.js).",
+  "scripts": {
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "infra:reset": "docker compose down -v && docker compose up -d",
+    "dev:back": "npm --prefix backend run start:dev",
+    "dev:front": "npm --prefix frontend run dev",
+    "dev:puente": "npm --prefix puente-huellero start",
+    "build:back": "npm --prefix backend run build",
+    "build:front": "npm --prefix frontend run build",
+    "lint": "npm --prefix backend run lint && npm --prefix frontend run lint",
+    "test": "npm --prefix backend run test",
+    "db:migrate": "npm --prefix backend run prisma:migrate",
+    "db:seed": "npm --prefix backend run prisma:seed",
+    "db:studio": "npm --prefix backend run prisma:studio",
+    "install:all": "npm --prefix backend install && npm --prefix frontend install && npm --prefix puente-huellero install"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
